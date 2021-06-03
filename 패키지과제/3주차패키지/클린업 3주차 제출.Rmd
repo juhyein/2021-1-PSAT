@@ -1,0 +1,291 @@
+---
+title: "package3"
+author: "주혜인"
+date: '2021 3 24 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Chapter1
+기본세팅
+```{r cars}
+pacman::p_load("tidyverse", "data.table","gridExtra")
+
+setwd("C:/Users/JU HYE IN/Desktop/피셋/패키지과제/3주차패키지")
+data<-fread("data.csv",header=TRUE, stringsAsFactors = FALSE)
+test<-fread("test.csv",header=TRUE, stringsAsFactors = FALSE)
+```
+
+
+#### 1~3번
+1. 'bmi'변수를 numeric 자료형으로 바꾸고, NA값을 mean imputation으로 채우세요.
+2. 문자형(character) 변수를 명목형 변수(factor)로 바꾸세요.
+3. 'id'변수를 제거하세요
+```{r}
+data <- data %>% 
+  mutate(bmi = as.numeric(bmi),
+         bmi = ifelse(is.na(bmi),mean(bmi,na.rm=T),bmi)) %>% 
+  mutate_if(is.character,as.factor) %>% 
+  select(-id)
+
+data<-data %>% 
+  mutate(heart_disease=as.factor(heart_disease),
+         hypertension=as.factor(hypertension),
+         stroke=as.factor(stroke))
+
+#다음 문제를 위해 character변수가 아니지만 명목형 변수들을 명목형으로 바꿔주었습니다.
+```
+
+
+#### 4번
+한 축에는 모든 변수형 범주들이 들어나고 다른 축에는 변수형 범주들의 값들이 들어가면 문제에서 제시된 그래프와 동일한 그래프가 나올 것이라고 생각하여 다음과 같이 하였습니다.
+
+work_type의 경우 stroke에 따라 가장 큰 차이를 보입니다. stroke :1에는 children이 거의 없는 반면 stroke:0인 경우에는 children이 비교적 많은 비중을 차지합니다. 이는 뇌졸증이 어린 아이들에게는 많이 나타나지 않는 질병이기 때문인것으로 보입니다. 또한 고혈압과 심장병(hypertension, heart_disease)의 비율은 stroke:1인 경우 상대적으로 더 큽니다. 성별은 target변수에 따라 다른 변수들에 비해 큰 차이를 보이지 않았습니다. 기혼자의 비율은 stroke:1인 경우에 더 많습니다.
+```{r, fig.height=5 , fig.width=10}
+p1<-data %>%
+  filter(stroke==1) %>% 
+  gather(c(work_type,smoking_status, Residence_type, hypertension, heart_disease, gender, ever_married),key="variable", value=" ") %>%
+  ggplot(aes(x=variable,fill=` `))+
+  geom_bar(position="fill", alpha=0.5)+
+  ylab('')+
+  ggtitle("stroke:1")+
+  coord_flip()+
+  theme_classic()+
+  theme(legend.position = "bottom",plot.title = element_text(hjust = 0.5))
+  
+p0<-data %>%
+  filter(stroke==0) %>% 
+  gather(c(work_type,smoking_status, Residence_type, hypertension, heart_disease, gender, ever_married),key="variable", value=" ") %>%
+  ggplot(aes(x=variable,fill=` `))+
+  geom_bar(position="fill", alpha=0.5)+
+  ylab('')+
+  ggtitle("stroke:0")+
+  coord_flip()+
+  theme_classic()+
+  theme(legend.position = "bottom",plot.title = element_text(hjust = 0.5))
+
+
+grid.arrange(p1,p0,ncol=2)
+```
+
+
+#### 문제 5번
+target값 별로 수치형 변수의 분포를 다음과 같이 시각화 하고, 간단히 해석해보세요.
+bmi의 분포는 target값 별로 큰 차이를 보이지 않습니다. age는 stroke:1, 즉 뇌졸증을 겪은 경우 더 고령자의 분포가 뇌졸증을 겪지 않은 경우보다 많습니다.
+```{r}
+d1<-data %>% 
+  filter(stroke==1) %>% 
+  gather(c(age, avg_glucose_level, bmi), key="key", value="variable") %>% 
+  ggplot(aes(x=variable,  color=key))+
+  geom_density()+
+  theme_classic()+
+  ggtitle("stroke:1")+
+  theme(plot.title = element_text(hjust = 0.5),legend.title = element_blank())
+  
+
+d0<-data %>% 
+  filter(stroke==0) %>% 
+  gather(c(age, avg_glucose_level, bmi), key="key", value="variable") %>% 
+  ggplot(aes(x=variable,  color=key))+
+  geom_density()+
+  theme_classic()+
+  ggtitle("stroke:0")+
+  theme(plot.title = element_text(hjust = 0.5),legend.title = element_blank())
+
+
+grid.arrange(d1,d0,nrow=2)
+```
+
+#### 6번 타겟 변수와 범주형 변수에 대한 카이스퀘어 독립성 검정을 진행하고 다음과 같이 출력하세요.
+두 변수가 실제로 연관성이 존재하는지를 확인하는 독립성 검정을 통해 연관성이 없다는 귀무가설을 기각할 수 있는지 여부를 확인해 보았습니다. chisq.test()함수를 이용하여 p-value가 0.05보다 작으면 귀무가설을 기각한다고 판단하였습니다.
+```{r}
+cate_df<-data %>% 
+  select_if(is.factor) %>% 
+  select(-stroke) %>% 
+  as.data.frame
+
+(chi_result<-data.frame(cate_var=cate_df %>% colnames, chi=NA))
+
+for (i in 1:7){
+  tab<-table(cate_df[,i],data$stroke)
+  t<-tab %>% chisq.test(correct = FALSE)
+  chi_result$chi[i]<-ifelse(t$p.value<0.05, "denied", "accepted")
+};chi_result
+```
+
+
+#### 문제7 카이스퀘어 독립성 검정에서 가설을 기각하지 못한 범주형 변수를 제거하세요.
+위 결과를 이용하여 gender, Residence_type을 제거했습니다.
+```{r}
+data<-data %>% select(-c(gender, Residence_type))
+```
+
+
+#### 문제8 train data에서 했던 전처리 방법들을 사용하여 전처리 하세요.
+```{R}
+test<-test %>% 
+  mutate(bmi = as.numeric(bmi),
+         bmi = ifelse(is.na(bmi),mean(bmi,na.rm=T),bmi)) %>% 
+  mutate_if(is.character,as.factor) %>% 
+  mutate_if(is.integer, as.factor) %>% 
+  select(-c(id,gender, Residence_type)) #가설 기각하지 못한 변수 제거
+```
+
+
+
+### Chapter 2 Catboost
+```{r}
+pacman::p_load("catboost", "caret","MLmetrics")
+```
+
+#### 문제0) Catboost 모델의 특성 및 대표적인 파라미터에 대해 간단히 설명하시오.
+
+catboost 모델은 데이터에 범주형 변수가 많을 때 유용한 부스팅모델이다. catboost의 특징 중 하나는 level-wise로 트리를 만들어 나간다는 점이다. 또한 기존의 부스팅 모델이 일괄적으로 모든 훈련 데이터를 대상으로 잔차계산을 했다면 catboost는 일부만 이용하여 잔차계산을 한 뒤 이를 바탕으로 모델을 만든다. 또한 오버피팅 방지를 위해 부스팅을 할 때 데이터 순서를 매번 섞어준다. 대표적인 파라미터는 learning rate, depth 등이 있다.
+
+#### 문제1
+```{r}
+(logloss_cb<-expand.grid(depth=c(4,6,8), iterations=c(100,200), logloss=NA))
+```
+
+#### 문제2
+
+```{r}
+set.seed(1234)
+f<-createFolds(data$stroke, k=5)
+start <- Sys.time()
+for (i in 1:6){
+  L_loss=numeric(5)
+  for (j in 1:5){
+    ind<-f[[j]]
+    cv.train=data[-ind,]
+    cv.test=data[ind,]
+    
+    y_train<-cv.train %>% select(stroke) %>% unlist%>%as.character %>%   as.integer
+    x_train<-cv.train %>% select(-stroke)
+    
+    y_test<-cv.test %>% select(stroke) %>% unlist%>%as.character%>% as.integer
+    x_test<-cv.test %>% select(-stroke)
+    
+    train_pool<-catboost.load_pool(data=x_train, label = y_train)
+    test_pool<-catboost.load_pool(data=x_test, label=y_test)
+    
+    params <- list(iterations=logloss_cb$iterations[i],
+                   depth=logloss_cb$depth[i],
+                   loss_function='Logloss',
+                   random_seed = 1234,
+                   logging_level='Silent')
+    model <- catboost.train(learn_pool = train_pool, params = params)
+    yhat=catboost.predict(model, test_pool, prediction_type="Probability")
+    L_loss[j]<-LogLoss(yhat, y_test)
+  } 
+  logloss_cb$logloss[i]<-mean(L_loss)
+}; logloss_cb
+
+catboost_runningtime<-Sys.time() - start ; catboost_runningtime
+
+
+dat_plot = logloss_cb %>% 
+  mutate(depth = as.factor(depth),
+         iterations = as.factor(iterations))
+ggplot(aes(x=depth,y=iterations,size=logloss),data=dat_plot)+geom_point(color='#845ec2')+theme_bw()
+
+```
+
+
+#### 문제3 logloss_cb 에서 가장 낮은 logloss 값의 행을 출력하세요.
+```{r}
+best_ind<-which.min(logloss_cb$logloss)
+logloss_cb[best_ind,]
+```
+
+#### 문제4. 가장 낮은 logloss 값의 파라미터로 전체 데이터를 학습시켜 test set 에 대한 logloss 값을 구하세요
+```{r}
+y_train<-data %>% select(stroke) %>% unlist%>%as.character %>%  as.integer
+x_train<-data %>% select(-stroke)
+y_test<-test %>% select(stroke) %>% unlist%>%as.character %>% as.integer
+x_test<-test %>% select(-stroke)
+
+train_pool<-catboost.load_pool(data=x_train, label = y_train)
+test_pool<-catboost.load_pool(data=x_test, label=y_test)
+
+params <- list(iterations=logloss_cb$iterations[best_ind],
+               depth=logloss_cb$depth[best_ind],
+               loss_function='Logloss',
+               random_seed = 1234,
+               logging_level='Silent')
+model <- catboost.train(learn_pool = train_pool, params = params)
+yhat=catboost.predict(model,test_pool, prediction_type="Probability")
+(log_loss<-LogLoss(yhat, y_test))
+```
+
+
+#### Chapter3 K-means clustering
+```{r}
+pacman::p_load("factoextra", "cluster")
+num_data<-data %>% select_if(is.numeric)
+```
+#### 문제1 scale함수로 정규화 스케일링을 하세요.
+
+```{r}
+scld<-num_data %>% mutate_all(scale)
+```
+
+#### 문제2 fviz_nbclust 함수로 다음과 같이 시각화 한 뒤 적절한 K 값이 무엇인지 설명하세요.
+WSS를 보았을 때 k=3 또는 k=4 일 때 엘보포인트로 보인다. 실루엣값은 4일때 가장 높지만 3일때와 거의 유사하다. 따라서 k=3,4모두 사용해도 무방할 듯 하지만 해석이 좀 더 간단하고 용이하도록 하기 위해 차이가 크지 않다면 더 적은 그룹으로 먼저 분류해보고자 한다.
+```{r}
+k1<-fviz_nbclust(scld,kmeans,method="wss")
+k2<-fviz_nbclust(scld,kmeans,method="silhouette")
+grid.arrange(k1,k2, ncol=2)
+```
+
+#### 문제3
+k-means 클러스터링을 한 후, 다음과 같이 시각화하세요.
+```{r}
+set.seed(1234)
+km<-kmeans(scld,3, nstart = 1, iter.max = 30)
+fviz_cluster(km,data=scld)+theme_classic()
+```
+
+#### 문제4사용한 변수들 age, avg_glucose_level, bmi에 대해 다음과 같이 box_plot시각화를 하고, 클러스터 별로 해석해보세요.
+세 변수가 비교적 높은 값에 많이 분포해 있을 때 cluster=1로 묶인 경우가 많다. 반면 이와 반대로 낮은 값을 가질 때 2인 경우가 많다.
+```{r, fig.height=5 , fig.width=10}
+num_data$cluster<-as.factor(km$cluster)
+
+b1<-num_data %>% 
+  ggplot(aes(x=age, y=cluster, fill=cluster, color=cluster))+
+  geom_boxplot(alpha=0.7,outlier.shape=NA)+
+  stat_boxplot(geom='errorbar',aes(color=cluster))+
+  scale_fill_manual(values=c("#845ec2","#ffc75f","#ff5e78"))+
+  scale_color_manual(values=c("#845ec2","#ffc75f","#ff5e78"))+
+  coord_flip()+
+  theme_classic()+
+  theme(legend.position = "none")
+  
+b2<-num_data %>% 
+  ggplot(aes(x=avg_glucose_level, y=cluster, fill=cluster, color=cluster))+
+  geom_boxplot(alpha=0.7,outlier.shape=NA)+
+  stat_boxplot(geom='errorbar',aes(color=cluster))+
+  scale_fill_manual(values=c("#845ec2","#ffc75f","#ff5e78"))+
+  scale_color_manual(values=c("#845ec2","#ffc75f","#ff5e78"))+
+  coord_flip()+
+  theme_classic()+
+  theme(legend.position = "none")
+
+
+
+b3<-num_data %>% 
+  ggplot(aes(x=bmi, y=cluster, fill=cluster, color=cluster))+
+  geom_boxplot(alpha=0.7,outlier.shape=NA)+
+  stat_boxplot(geom='errorbar',aes(color=cluster))+
+  scale_fill_manual(values=c("#845ec2","#ffc75f","#ff5e78"))+
+  scale_color_manual(values=c("#845ec2","#ffc75f","#ff5e78"))+
+  coord_flip()+
+  theme_classic()+
+  theme(legend.position = "none")
+
+
+grid.arrange(b1,b2,b3, ncol=3)
+```

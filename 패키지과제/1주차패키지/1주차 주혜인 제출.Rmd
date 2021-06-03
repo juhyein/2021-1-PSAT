@@ -1,0 +1,257 @@
+---
+title : "주혜인 1주차"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Chapter 1
+# 문제0 기본세팅 
+```{r ch1(0)}
+library(plyr)
+library(tidyverse)
+library(data.table)
+setwd("C:/Users/JU HYE IN/Desktop/피셋/패키지과제/1주차패키지")
+
+data<-fread("data.csv",
+      header=TRUE,
+      stringsAsFactors = FALSE)
+```
+
+# 문제1 데이터 확인하기
+str으로 데이터의 구성을 살펴보고, 각 열마다 NA 개수와 unique 값 및 개수를 확인해 보세요. (colSum, unique, length)
+
+```{r ch1.(1)}
+str(data)
+
+colSums(is.na(data)) # 3개
+
+data %>%
+  sapply(unique) %>% 
+  sapply(length)
+```
+총 8개의 변수로 이루어진 데이터.
+confirmed date에 NA값이 총 3개 있다.
+
+# 2-1 NA가 있는 행 삭제하세요
+
+```{r}
+data<-data %>%
+  filter(is.na(confirmed_date)==FALSE)
+```
+
+# 2-2 빈 문자열("")이 있는 행을 삭제하고, 각 열마다 NA개수와 unique값 개수를 다시 확인해 보세요
+
+```{r}
+sum(data=="")#2596
+sum(data$patient_id=="")
+sum(data$sex=="")#1122
+sum(data$age=="")#1380
+sum(data$province=="")
+sum(data$country=="")
+sum(data$city=="")#94
+sum(data$state=="")
+sum(data$confirmed_date=="")
+
+data<-data %>%filter(age!="")
+data<-data %>%filter(sex!="")
+data<-data %>%filter(city!="")
+
+data %>%
+  sapply(unique) %>% 
+  sapply(length)
+```
+
+# 3 country가 Korea인 행만 남긴 다음, country열을 제거하세요.
+
+```{r}
+data<- data %>% 
+  filter(country=='Korea') %>% 
+  select(-country)
+
+```
+
+# 4.province 변수 내 서울 부산 대구 인천 대전 세종 울산 제주도 값을 다음과 같이 바꾸세요
+
+```{r}
+
+data$province<- revalue(data$province, replace=c(서울="서울특별시", 부산="부산광역시",대구= "대구광역시",인천="인천광역시",대전="대전광역시",세종="세종특별자치시", 울산="울산광역시", 제주도="제주특별자치도"))
+
+```
+
+# 5.confirmed_date를 날짜 자료형(Date)으로 바꾸세요.
+
+```{r}
+data$confirmed_date <-as.Date(data$confirmed_date)
+
+```
+# 6. 확진날짜(confirmed_date) 별 확진자 수에 대한 파생변수를 만드세요
+
+```{r}
+
+confirmed_number<-data %>% 
+  group_by(confirmed_date) %>% 
+  summarise(confirmed_number=n())
+
+
+data<-left_join(data,confirmed_number, by="confirmed_date")
+ 
+```
+# 7.확진날짜(confirmed_date)의 주말 여부에 대한 파생변수를 만드세요 
+```{r}
+data %>% mutate(wday=ifelse(wday(confirmed_date)==(1|7),"주말","주중") )
+
+```
+
+# 8.나이대 별 일별 확진자 수에 대한 summary를 확인해 보세요.
+```{r}
+tapply(data$confirmed_number,data$age,summary)
+```
+
+## Chapter 2
+
+```{r}
+library(ggplot2)
+```
+# 문제 1 Line plot
+confirmed_date 와 confirmed_number 변수를 이용하여 확진자수 추이 그래프를 그리고 최대 확
+진자 에 대한 정보 도 표시하세요. (적절한 함수를 이용하여 #대신 정확한 날짜 및 수를 쓸 것 색 navy, lightblue 제목:bold체)
+
+```{r}
+data %>% 
+  ggplot(aes(x=confirmed_date, y=confirmed_number))+
+  geom_line(col="lightblue")+
+  theme_bw()+
+  theme_classic()+
+  geom_point(aes(x=confirmed_date[which.max(confirmed_number)],y=max(confirmed_number)), col="navy")+
+  geom_text(x=as.Date("2020-02-05"),y=145,label='2020-03-05(145명)',color='navy')
+  
+
+```
+
+# 문제 1-2 Line Plot
+
+province 별 확진자 수 추이 그래프를 그리시오
+```{r}
+data %>% 
+  group_by(province) %>% 
+  ggplot(aes(x=confirmed_date,y=confirmed_number,colour=province))+
+  geom_line()+
+  facet_wrap(.~province, ncol=4)
+
+
+```
+
+
+# 문제 2 Bar Plot.
+
+지역별 확진자 수를 state(확진자 상황) 그룹 별로 나누어 그래프를 그리세요.
+```{r}
+data %>% 
+  ggplot(aes(x=reorder(province,confirmed_number,sum),y=mean(confirmed_number),fill=state))+
+  geom_col(alpha=0.5)+
+  labs(x="지역", y="확진자 수")+
+  coord_flip()
+  
+
+```
+
+# 문제3 Box plot
+나이대별 일별 확진자 수 box plot을 그리세요.
+
+```{r}
+data %>% 
+  ggplot(aes(x=age, y=confirmed_number, fill=age ,color=age))+
+  geom_boxplot(alpha=0.5)
+
+```
+# 문제 3-2 
+
+나이대별 일별 확진자 수에 대한 일원분산문석을 실시하여 해석해 보세요.
+```{r}
+fit1=lm(confirmed_number~age, data=data)
+anova(fit1, data=data)
+
+```
+
+
+p-value를 확인해보면 낮은 것을 알 수 있다. 따라서 나이대 별로 확진자 수에 차이가 있다는 점을 알 수 있다.
+
+## chapter3.모델링_회귀분석
+
+```{r}
+library(MASS)
+library(corrplot)
+library(caret)
+library(MLmetrics)
+
+raw_data<-Boston
+```
+
+# 문제 1.
+상관계수 플랏을 만들고, 간단히 해석해 보세요
+```{r}
+corrplot(cor(raw_data), method="number", type="upper", number.cex=0.8)
+```
+
+
+tax와 rad의 양의 상관관계가 굉장히 높다.
+또한 dis 변수와 indus, nox, age 간 음의 상관관계가 높다. 이러한 변수들이 분석할 때 있어서 정확도에 영향을 줄 수도 있을 것 같다.
+
+```{r}
+raw_data %>% 
+  gather(-medv, key="var", value="val") %>% 
+  ggplot(aes(x=val, y=medv))+
+  labs(title="Scatter plot of dependent variables vs Median Value (medv)")+
+  geom_point()+
+  geom_smooth(method=lm,col="lightblue")+
+  facet_wrap(~ var, scales = "free") +
+  theme_bw()
+```
+
+# 문제3 
+train/test 데이터를 7:3으로 나누세요
+
+```{r}
+set.seed(1234)
+ind<-createDataPartition(raw_data$medv, p=0.3 , list=F)
+
+train<-raw_data[-ind,]
+test<-raw_data[ind,]
+```
+
+# 문제 3-2
+train 데이터로 medv를 종속변수로 하고 나머지를 모두 독립변수로 하는 회귀 모형을 만든 후 간단히 결과를 해석한 수, test에 개한 RMSE를 구하세요.
+```{r}
+fit<-lm(medv~., data=train)
+summary(fit)
+yhat=predict(fit, test)
+RMSE(yhat, test$medv)
+```
+
+
+여러 변수 중 chas,nox,chas, dis,ptratio,Istat 가 종속변수인 medv에 주로 영향을 미치는 것으로 보인다. R^2는 0.74로 그렇게 높지는 않아보인다. p-value 가 0.5 보다 작다는 점에서 모든 Beta=0이라는 가설을 기각할 수 있을것같다. 
+
+
+# 문제 3-3 모델의 rmse를 낮출 수 있는 방법에 대해 간략시 설명해 주세요.
+아까 상관계수 플랏에서 파악했듯이 연관이 높은 변수들을 조정한다면 rmse를 낮출 수 있을 것으로 보인다. 또한 기본적인 가정들을 만족하는지 확인해보고 이에대해 점검하는것도 필요해 보인다.
+
+# 문제 4 
+적합한 회귀모형의 계수에 대해 아래와 같이 시각화 해주세요.
+```{r}
+beta<-data.frame(value=round(fit$coefficients,2))
+beta$name<-rownames(beta)
+beta %>% 
+  ggplot(aes(x=reorder(name,value),y=value, fill=value, color=value))+
+  geom_bar(stat='identity', alpha=0.2)+
+  coord_flip()+
+  labs(x="intercept and variables", y="value")+
+  scale_fill_gradient2(low="blue", mid="yellow", high="red")+
+  scale_colour_gradient2(low="blue", mid="yellow", high="red")+
+  geom_text(aes(label=value),size=3.5, position = position_stack(vjust = .5 ), color="black")+
+  theme_classic()+
+  theme(legend.position = "none")
+
+```
