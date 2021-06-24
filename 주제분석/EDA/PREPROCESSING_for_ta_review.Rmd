@@ -1,0 +1,34 @@
+---
+title: "전처리-tripadvisor 관광지 리뷰"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/JU HYE IN/Desktop/주분/EDA")
+library(tidyverse)
+library(stringr)
+library(knitr)
+```
+
+#### 간단하게 text(리뷰내용) quote(리뷰제목) 에서 자음,모음이 모두 존재하는 한글,영어,숫자만 남기고 모두 제거
+
+  사진찍기 좋아요는 이것만 꺠져서 나와서 그냥 바꿔줌
+```{r}
+review<-read_csv("visitjeju_tripadvisor_review.csv")
+review$quote[2691]="사진찍기 좋아요"
+```
+  
+  특수기호 이상한 글자제거 %>%  빈칸 여러개는 한칸으로
+```{r}
+review1=review
+review$text<-review$text %>% str_replace_all("[^가-힣|0-9|a-z|A-Z]"," ") %>% str_replace_all("[ ]+"," ") 
+review$quote<-review$quote %>% str_replace_all("[^가-힣|0-9|a-z|A-Z]"," ")%>% str_replace_all("[ ]+"," ") 
+```
+
+전처리 전, 후 비교
+```{r}
+df=data.frame("전저리 전 리뷰" = review1$text,
+              "전처리 후 리뷰" = review$text) %>% head(10)
+kable(df, label="전처리 전[/]후 비교")
+```

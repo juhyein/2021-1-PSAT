@@ -1,0 +1,226 @@
+---
+title: "eda"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/JU HYE IN/Desktop/주분/EDA")
+library(plyr)
+pacman::p_load("dplyr","tidyverse","htmlwidgets", "htmltools","jsonlite","yaml","base64enc","KoNLP","wordcloud2","ggthemes")
+library(tvthemes)
+library(extrafont)
+library(plyr) 
+library(tidytext)
+library(magrittr)
+library(knitr)
+```
+
+
+약간의 정리
+```{r , echo=FALSE}
+setwd("C:/Users/JU HYE IN/Desktop/주분/EDA")
+review<-read_csv("visitjeju_tripadvisor_review.csv")
+review$quote[2691]="사진찍기 좋아요"
+
+review$text<-review$text %>% str_replace_all("[^가-힣|0-9|a-z|A-Z]"," ") %>% str_replace_all("[ ]+"," ") 
+review$quote<-review$quote %>% str_replace_all("[^가-힣|0-9|a-z|A-Z]"," ")%>% str_replace_all("[ ]+"," ") 
+```
+
+### 평균별점과 리뷰개수 관계 있을까?
+```{r}
+mean_rate <-
+  review %>% 
+  group_by(name) %>% 
+  summarise("리뷰개수"=n(),
+            "평균평점"=mean(rating)) %>% 
+  arrange(desc(리뷰개수));mean_rate[1:10,]
+
+kable(mean_rate, caption="리뷰개수 top10 목록과 평균평점")
+
+mean_rate %>% 
+  ggplot(aes(x=리뷰개수, y=평균평점, color="orange")) + 
+  geom_point()+
+  theme_wsj() + 
+  scale_colour_wsj("colors6")+
+  ggtitle("number of review & mean rate")+
+  xlab("number of review")+
+  ylab("mean_rate")+
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position ="none",axis.title=element_text(size=15))
+```
+### 리뷰 수 top5
+```{r , echo=FALSE}
+count5<-review %>% 
+  group_by(name) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(n)) %>% 
+  head(5)
+kable(count5,caption = "리뷰 수 top5" )
+
+cc<-left_join(review, count5, by="name")
+cc<-cc[complete.cases(cc),]
+
+cc %>% 
+  ggplot(aes(x=reorder(name,n), y=n, fill=factor(rating)))+
+  geom_col()+
+  geom_text(aes(label=name), hjust=0.001,size=4, color="grey4" )+
+  theme_economist() + 
+  scale_fill_economist()+
+  coord_flip()+
+  labs(title = "TOP 5 review count",
+       caption = "리뷰건수가 가장 많은 5개의 관광지",
+      color="rate", y="리뷰 건수", x="") +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15),legend.position ="bottom",axis.text.y=element_blank(),axis.title=element_text(size=15), legend.title =element_text(10))
+
+```
+
+
+# 평점 별 특징 파악하자
+
+```{r , echo=FALSE}
+review %>% 
+  ggplot(aes(x=str_length(text)))+
+  geom_density(aes(group=factor(rating), color=factor(rating)))+
+  theme_wsj()+
+  scale_colour_wsj("colors6")+
+  labs(colour = "평점", subtitle="density plot")+
+  ggtitle("평점 별 리뷰의 길이")+
+  theme(legend.position = "bottom",plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.title = element_text( size = 20),legend.text = element_text(size = 7),
+        plot.subtitle =element_text(hjust = 0.5, size = 10) )
+
+
+
+```
+
+
+### #리뷰개수가 10개는 넘는 것 중에 평균평점 상위 10, 비결이 뭘까?
+잘......
+```{r,echo=FALSE}
+over10top10<-mean_rate %>% 
+  filter(리뷰개수>10) %>% 
+  arrange(desc(평균평점)) %>% 
+  head(10)
+
+over10top10<-review %>% 
+  filter(name==over10top10$name)
+
+aaa<-unlist(extractNoun(over10top10$text))
+aaa<-table(aaa) 
+aaa<-data.frame(head(sort(aaa, decreasing = T),200))
+aaa<-aaa[-c(2,3,4,10),]
+wordcloud2(aaa,shape="pentagon",color = "random-light")
+wordcloud2(aaa,shape="diamond",color = "random-light")
+wordcloud2(aaa,,color = "random-light")
+wordcloud2(aaa,shape="star",color = "random-light")
+```
+
+
+```{r}
+library(textclean)
+sentiment<-review %>% 
+  mutate(id=1:length(text),
+         reply=str_squish(replace_html(text)))
+
+dic<-read.csv("dic.txt", encoding = "UTF-8")
+
+dic1<-separate(dic, X....1,c("word", "score") ,sep="\t")
+dic1$word[14850]<-"갈등"
+dic1$score[14850]<-(-1)
+
+
+#토큰화
+word_comment <- sentiment %>%
+  unnest_tokens(input = text,
+                output = word,
+                token = "words",
+                drop = F) %>% 
+  select(word, reply , rating)
+
+
+word_comment <- word_comment %>%
+  left_join(dic1, by = "word") %>%
+  mutate(score = ifelse(is.na(score), 0, score))
+View(word_comment)
+
+word_comment %>% 
+  group_by(rating) %>% 
+  summarise(n=n())
+
+#긍정으로 분류되는 단어들만 뽑아냄
+only_pos<-word_comment %>% 
+  filter(score>0)
+
+#일단 워드클라우드
+pos_words<-table(only_pos$word)
+wordcloud2(pos_words)
+
+#그 다음 bar graph
+pos_words<-as.data.frame(pos_words)
+
+pos_words %<>% 
+  rename(word=Var1, n=Freq)
+
+pos_words %>% 
+  arrange(desc(n)) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(word, -n), y=n, fill=word , color=word ))+
+  geom_col(alpha=0.5)+
+  theme_economist()+
+  labs(x="긍정 단어", y="개수")+
+  theme(legend.position = "none")
+
+only_pos %>% 
+  group_by(rating) %>% 
+  summarise(n=n()) %>% 
+  mutate(n=n/c(1536,3253,13581,40363,72068)) %>% 
+  ggplot(aes(x=reorder(factor(rating),-n), y=n, fill=factor(rating), alpha=0.5 ))+
+  geom_col()+
+  theme_wsj()+
+  scale_fill_wsj()+
+  ggtitle("평점 별 긍정 단어의 비율")+
+  theme(legend.position = "none",plot.title = element_text(size=17, face="bold") )
+  
+
+#평점 5점인 애들은 뭐가 좋을까?
+wc_5<-table((only_pos %>% filter(rating==5))$word)
+
+letterCloud(wc_5, word="JEJU")
+wordcloud2(wc_5, backgroundColor = "orange", color = "darkgreen")
+
+
+only_pos %>% 
+  filter(rating==5) %>% 
+  group_by(word) %>% 
+  summarise(n=n()) %>% 
+  head(10) %>% 
+    ggplot(aes(x=reorder(word,-n), y=n, fill=word, alpha=0.5 ))+
+  geom_col()+
+  theme_wsj()+
+  scale_fill_stata()+
+  ggtitle("평점 5점 review의 긍정단어 top10")+
+  theme(legend.position = "none",plot.title = element_text(size=17, face="bold") )
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
